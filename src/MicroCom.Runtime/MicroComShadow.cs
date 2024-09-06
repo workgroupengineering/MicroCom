@@ -10,12 +10,13 @@ namespace MicroCom.Runtime
         private readonly object _lock = new object();
         private readonly Dictionary<Type, IntPtr> _shadows = new Dictionary<Type, IntPtr>();
         private readonly Dictionary<IntPtr, Type> _backShadows = new Dictionary<IntPtr, Type>();
+        private IMicroComShadowContainer _target;
         private GCHandle? _handle;
         private volatile int _refCount;
-        internal IMicroComShadowContainer Target { get; }
+        internal IMicroComShadowContainer Target => _target;
         internal MicroComShadow(IMicroComShadowContainer target)
         {
-            Target = target;
+            _target = target;
             Target.Shadow = this;
         }
         
@@ -90,7 +91,7 @@ namespace MicroCom.Runtime
                     MicroComRuntime.UnhandledException(Target, e);
                 }
             }
-            
+            System.Diagnostics.Trace.WriteLine($"Shadow {Target.ID} AddRef {_refCount}");
             return Interlocked.Increment(ref ccw->RefCount);
         }
 
@@ -98,6 +99,7 @@ namespace MicroCom.Runtime
         {
             Interlocked.Decrement(ref _refCount);
             var cnt = Interlocked.Decrement(ref ccw->RefCount);
+            System.Diagnostics.Trace.WriteLine($"Shadow {Target.ID} Release {_refCount}");
             if (cnt == 0)
                 return FreeCcw(ccw);
 
@@ -121,13 +123,15 @@ namespace MicroCom.Runtime
                 {
                     _handle?.Free();
                     _handle = null;
+                    var target = Target;
+                    _target = null!;
                     try
                     {
-                        Target.OnUnreferencedFromNative();
+                        target.OnUnreferencedFromNative();
                     }
                     catch(Exception e)
                     {
-                        MicroComRuntime.UnhandledException(Target, e);
+                        MicroComRuntime.UnhandledException(target, e);
                     }
                 }
             }
